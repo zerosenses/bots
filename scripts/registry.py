@@ -76,7 +76,36 @@ def load_valid_zones() -> set[str]:
         parts = z.split("/")
         for i in range(1, len(parts)):
             prefixes.add("/".join(parts[:i]))
+    if any(z.startswith("Housing_") for z in zones):
+        prefixes.add("Housing")
     return zones | prefixes
+
+
+def zone_to_folder(zone: str) -> str:
+    """Map a zone ID to its repo folder path under bots/.
+    Housing zones start with 'Housing_' and are grouped under bots/Housing/."""
+    clean = zone.strip("/")
+    if clean.startswith("Housing_"):
+        return f"Housing/{clean}"
+    return clean
+
+
+def folder_to_zone(folder: str) -> str:
+    """Map a folder path under bots/ back to its official zone ID."""
+    clean = folder.strip("/")
+    if clean.startswith("Housing/Housing_"):
+        return clean.removeprefix("Housing/")
+    elif clean.startswith("Housing_"):
+        return f"MISPLACED/{clean}"
+    return clean
+
+
+def zone_to_world(zone: str) -> str:
+    """Extract world name from a zone ID."""
+    clean = zone.strip("/")
+    if clean.startswith("Housing_") or clean == "Housing" or clean.startswith("Housing/"):
+        return "Housing"
+    return clean.split("/", 1)[0]
 
 
 def is_known_zone(zone: str, valid_zones: set[str]) -> bool:
@@ -96,8 +125,9 @@ class Bot:
 
     @property
     def folder_zone(self) -> str:
-        """Zone path implied by where the file lives, e.g. bots/<zone>/file.txt."""
-        return self.path.parent.relative_to(BOTS_DIR).as_posix()
+        """Zone path implied by where the file lives, normalized to in-game zone ID."""
+        raw_folder = self.path.parent.relative_to(BOTS_DIR).as_posix()
+        return folder_to_zone(raw_folder)
 
     @property
     def zones(self) -> list[str]:
@@ -113,13 +143,13 @@ class Bot:
     def target_rel(self) -> str:
         """Repo-relative path the bot belongs at post-relocation."""
         if self.primary_zone:
-            return f"bots/{self.primary_zone}/{self.path.name}"
+            return f"bots/{zone_to_folder(self.primary_zone)}/{self.path.name}"
         return self.rel
 
     @property
     def world(self) -> str:
         target_zone = self.primary_zone or self.folder_zone
-        return target_zone.split("/", 1)[0]
+        return zone_to_world(target_zone)
 
     def to_entry(self) -> dict:
         return {
@@ -207,10 +237,10 @@ def validate_bot(bot: Bot, valid_zones: set[str]) -> None:
 
     # Pre-merge validation: fail if relocating would collide with an existing file
     if bot.primary_zone and bot.folder_zone != bot.primary_zone:
-        dest_path = BOTS_DIR / bot.primary_zone / bot.path.name
+        dest_path = BOTS_DIR / zone_to_folder(bot.primary_zone) / bot.path.name
         if dest_path.exists() and dest_path.resolve() != bot.path.resolve():
             bot.errors.append(
-                f"cannot relocate to primary zone: destination 'bots/{bot.primary_zone}/{bot.path.name}' already exists"
+                f"cannot relocate to primary zone: destination 'bots/{zone_to_folder(bot.primary_zone)}/{bot.path.name}' already exists"
             )
 
 
@@ -265,7 +295,7 @@ def relocate_bots(bots: list[Bot], dry_run: bool = False) -> list[str]:
     for bot in bots:
         if not bot.primary_zone or bot.folder_zone == bot.primary_zone:
             continue
-        dest_dir = BOTS_DIR / bot.primary_zone
+        dest_dir = BOTS_DIR / zone_to_folder(bot.primary_zone)
         dest_path = dest_dir / bot.path.name
         if dest_path.exists() and dest_path.resolve() != bot.path.resolve():
             continue
@@ -356,8 +386,8 @@ def generate_outputs(entries: list[dict]) -> dict[Path, str]:
             seen.add(z)
             by_zone.setdefault(z, []).append(e)
     for zone, zentries in by_zone.items():
-        world = zone.split("/", 1)[0]
-        path = BOTS_DIR / zone / ZONE_REGISTRY_NAME
+        world = zone_to_world(zone)
+        path = BOTS_DIR / zone_to_folder(zone) / ZONE_REGISTRY_NAME
         outputs[path] = render_zone_json(zone, world, zentries)
     return outputs
 
