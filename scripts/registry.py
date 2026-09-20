@@ -81,6 +81,14 @@ def load_valid_zones() -> set[str]:
     return zones | prefixes
 
 
+def normalize_zone(zone: str) -> str:
+    """Normalize user-entered zone variations (e.g. 'Housing/Housing_FarmHouse' -> 'Housing_FarmHouse')."""
+    clean = zone.strip().strip("/")
+    if clean.startswith("Housing/Housing_"):
+        return clean.removeprefix("Housing/")
+    return clean
+
+
 def zone_to_folder(zone: str) -> str:
     """Map a zone ID to its repo folder path under bots/.
     Housing zones start with 'Housing_' and are grouped under bots/Housing/."""
@@ -133,7 +141,7 @@ class Bot:
     def zones(self) -> list[str]:
         """Parsed comma-separated @zone entries: first is primary/folder zone."""
         raw = self.headers.get("zone", "")
-        return [z.strip() for z in raw.split(",") if z.strip()]
+        return [normalize_zone(z) for z in raw.split(",") if z.strip()]
 
     @property
     def primary_zone(self) -> str:
@@ -216,10 +224,11 @@ def validate_bot(bot: Bot, valid_zones: set[str]) -> None:
 
     for z in zones:
         if not is_known_zone(z, valid_zones):
+            hint = " (did you mean 'Housing' for all houses, or 'Housing_<HouseName>' for a specific house?)" if z == "Housing_" else ""
             bot.errors.append(
                 f"@zone '{z}' is not a known game zone or umbrella prefix of "
                 f"one (not in zones.json) and is not under the reserved "
-                f"'{GENERAL_WORLD}' namespace"
+                f"'{GENERAL_WORLD}' namespace{hint}"
             )
 
     fmt = bot.headers.get("format", "")
@@ -269,7 +278,7 @@ def resolve_bot_files(raw_paths: list[str]) -> tuple[list[Path], list[str]]:
             warnings.append(f"skipping '{raw}': not a .txt file under bots/")
             continue
         if not p.exists():
-            warnings.append(f"skipping '{raw}': file does not exist")
+            warnings.append(f"error: '{raw}' does not exist on disk")
             continue
         paths.append(p)
     return paths, warnings
@@ -467,10 +476,11 @@ def main() -> int:
         if raw:
             only, warnings = resolve_bot_files(raw)
             for w in warnings:
-                print(w)
-            if not only:
-                print("No bot files to validate.")
-                return 0
+                print(w, file=sys.stderr if "error:" in w else sys.stdout)
+            has_errors = any("error:" in w for w in warnings)
+            if has_errors or not only:
+                print("Validation failed: target bot file(s) could not be resolved.", file=sys.stderr)
+                return 1
             return cmd_validate(only)
         return cmd_validate()
     if args.cmd == "build":
