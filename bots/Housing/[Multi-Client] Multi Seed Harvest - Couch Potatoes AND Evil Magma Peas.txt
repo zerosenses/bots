@@ -1,10 +1,11 @@
 ###deimos_expertmode
-# @name: [Multi-Client] (SLOWER) Multi Seed Harvest - Couch Potatoes AND Evil Magma Peas.txt
+# @name: [Multi-Client] Multi Seed Harvest - Couch Potatoes AND Evil Magma Peas.txt
 # @zone: Housing
 # @author: Discord: homeyo / Github: zerosenses
 # @format: expertmode
 # @description:
 #START IN RANGE OF COUCH POTATO OR/AND EVIL MAGMA PEA.
+#(Recommended) HOOK HARVESTING CLIENTS ONLY.
 #(Recommended) START AWAY FROM ANY INTERACTABLE.
 #(Suggested) CAN REPLACE ALL "CouchPotatoes" OR/AND "MagmaEvilSnowPeas" WITH ANY PROPER SEED ENTITY NAME.
 
@@ -27,11 +28,11 @@ loop {
     if any inrange CouchPotatoes OR any inrange MagmaEvilSnowPeas {
         if any inrange CouchPotatoes {
             sameany entitytp CouchPotatoes
-            sameany sendkey X
+            sendkey X
         }
         if any inrange MagmaEvilSnowPeas {
             sameany entitytp MagmaEvilSnowPeas
-            sameany sendkey X
+            sendkey X
         }
     } else {
         log "OMG READ 1"
